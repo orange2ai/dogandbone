@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飞狗吃骨头 - 自动模式</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: skyblue;
+        }
+        #gameCanvas {
+            border: 1px solid black;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            color: white;
+        }
+        #autoButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 16px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="score">分数: 0</div>
+    <button id="autoButton">自动模式: 关闭</button>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const autoButton = document.getElementById('autoButton');
+
+        let canvasWidth = window.innerWidth;
+        let canvasHeight = window.innerHeight;
+        let isAutoMode = false;
+
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        let score = 0;
+        let animationFrameId;
+        let lastTime = 0;
+        const FPS = 60;
+        const frameInterval = 1000 / FPS;
+
+        const dogs = [{
+            x: 50,
+            y: canvasHeight / 2,
+            width: 50,
+            height: 30,
+            color: getRandomColor(),
+            targetY: canvasHeight / 2
+        }];
+
+        const bones = [];
+
+        function getRandomColor() {
+            const r = Math.floor(Math.random() * 200) + 55;
+            const g = Math.floor(Math.random() * 200) + 55;
+            const b = Math.floor(Math.random() * 200) + 55;
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function drawDog(dog) {
+            ctx.fillStyle = dog.color;
+            ctx.fillRect(dog.x, dog.y, dog.width, dog.height);
+        }
+
+        function drawBone(bone) {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(bone.x, bone.y, bone.width, bone.height);
+        }
+
+        function createBone() {
+            const baseSpeed = 2;
+            const speedIncrease = score * 0.1;
+            const maxSpeedIncrease = 5;
+            const boneSpeed = baseSpeed + Math.min(speedIncrease, maxSpeedIncrease);
+            
+            bones.push({
+                x: canvasWidth,
+                y: Math.random() * (canvasHeight - 20),
+                width: 30,
+                height: 10,
+                speed: boneSpeed
+            });
+        }
+
+        function moveBones(deltaTime) {
+            for (let i = bones.length - 1; i >= 0; i--) {
+                bones[i].x -= bones[i].speed * (deltaTime / 16);
+                if (bones[i].x + bones[i].width < 0) {
+                    bones.splice(i, 1);
+                }
+            }
+        }
+
+        function checkCollision() {
+            for (let i = bones.length - 1; i >= 0; i--) {
+                for (let j = 0; j < dogs.length; j++) {
+                    if (
+                        dogs[j].x < bones[i].x + bones[i].width &&
+                        dogs[j].x + dogs[j].width > bones[i].x &&
+                        dogs[j].y < bones[i].y + bones[i].height &&
+                        dogs[j].y + dogs[j].height > bones[i].y
+                    ) {
+                        score++;
+                        scoreElement.textContent = `分数: ${score}`;
+                        bones.splice(i, 1);
+                        
+                        if (score % 10 === 0) {
+                            addNewDog();
+                        }
+                        
+                        return;
+                    }
+                }
+            }
+        }
+
+        function addNewDog() {
+            const newDog = {
+                x: 50,
+                y: Math.random() * (canvasHeight - 30),
+                width: 50,
+                height: 30,
+                color: getRandomColor(),
+                targetY: Math.random() * (canvasHeight - 30)
+            };
+            dogs.push(newDog);
+        }
+
+        function updateDogs(deltaTime) {
+            const totalDogs = dogs.length;
+            const sectionHeight = canvasHeight / totalDogs;
+
+            dogs.forEach((dog, index) => {
+                if (isAutoMode) {
+                    // 自动模式：寻找最近的骨头
+                    let closestBone = null;
+                    let minDistance = Infinity;
+                    for (const bone of bones) {
+                        const distance = Math.abs(bone.y - dog.y);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            closestBone = bone;
+                        }
+                    }
+                    if (closestBone) {
+                        dog.targetY = closestBone.y - dog.height / 2;
+                    }
+                }
+
+                // 平滑移动到目标位置
+                dog.y += (dog.targetY - dog.y) * 0.1;
+
+                // 限制在各自的区域内
+                dog.y = Math.max(index * sectionHeight, Math.min((index + 1) * sectionHeight - dog.height, dog.y));
+            });
+        }
+
+        function gameLoop(currentTime) {
+            animationFrameId = requestAnimationFrame(gameLoop);
+
+            const deltaTime = currentTime - lastTime;
+            if (deltaTime < frameInterval) return;
+
+            lastTime = currentTime - (deltaTime % frameInterval);
+
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            if (Math.random() < 0.02) {
+                createBone();
+            }
+
+            updateDogs(deltaTime);
+            dogs.forEach(drawDog);
+            moveBones(deltaTime);
+            bones.forEach(drawBone);
+            checkCollision();
+        }
+
+        function startGame() {
+            lastTime = performance.now();
+            gameLoop(lastTime);
+        }
+
+        function resizeCanvas() {
+            canvasWidth = window.innerWidth;
+            canvasHeight = window.innerHeight;
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isAutoMode) {
+                const mouseY = e.clientY;
+                const totalDogs = dogs.length;
+                const sectionHeight = canvasHeight / totalDogs;
+
+                dogs.forEach((dog, index) => {
+                    dog.targetY = mouseY - (totalDogs - index - 1) * sectionHeight - dog.height / 2;
+                });
+            }
+        });
+
+        autoButton.addEventListener('click', () => {
+            isAutoMode = !isAutoMode;
+            autoButton.textContent = `自动模式: ${isAutoMode ? '开启' : '关闭'}`;
+        });
+
+        startGame();
+    </script>
+</body>
+</html>
